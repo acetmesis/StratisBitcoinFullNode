@@ -2,11 +2,16 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
+using FluentAssertions;
 using NBitcoin;
 using Stratis.Bitcoin.Consensus;
 using Stratis.Bitcoin.Features.MemoryPool;
+using Stratis.Bitcoin.Features.Wallet;
+using Stratis.Bitcoin.Features.Wallet.Controllers;
+using Stratis.Bitcoin.Features.Wallet.Models;
 using Stratis.Bitcoin.IntegrationTests.Common;
 using Stratis.Bitcoin.IntegrationTests.Common.EnvironmentMockUpHelpers;
+using Stratis.Bitcoin.IntegrationTests.Wallet;
 using Stratis.Bitcoin.Tests.Common;
 using Xunit;
 
@@ -374,5 +379,63 @@ namespace Stratis.Bitcoin.IntegrationTests.Mempool
                 TestHelper.WaitLoop(() => stratisNode2.CreateRPCClient().GetRawMempool().Length == 0);
             }
         }
+
+        [Fact]
+        public void MineBlocksBlockOrphanedAfterReorgTxsReturnedToMempool()
+        {
+            // Setup two synced nodes with some mined blocks.
+            string Password = "password";
+            string Name = "mywallet";
+            string AccountName = "account 0";
+
+            NodeBuilder builder = NodeBuilder.Create(this);
+            CoreNode node1 = builder.CreateStratisPowNode(KnownNetworks.RegTest).NotInIBD().WithWallet();
+            CoreNode node2 = builder.CreateStratisPowNode(KnownNetworks.RegTest).NotInIBD().WithWallet();
+            MempoolValidationState mempoolValidationState = new MempoolValidationState(true);
+
+            builder.StartAll();
+
+            int maturity = (int)node1.FullNode.Network.Consensus.CoinbaseMaturity;
+            TestHelper.MineBlocks(node1, maturity + 20);
+            node1.CreateRPCClient().AddNode(node2.Endpoint, true);
+            TestHelper.WaitLoop(() => TestHelper.AreNodesSynced(node1, node2));
+
+            // Nodes disconnect.
+            node1.CreateRPCClient().RemoveNode(node2.Endpoint);
+
+            // Create tx and node 1 has this in mempool.
+            HdAddress receivingAddress = node2.FullNode.WalletManager().GetUnusedAddress(new WalletAccountReference(Name, AccountName));
+            Transaction transaction = node1.FullNode.WalletTransactionHandler().BuildTransaction(WalletTests.CreateContext(node1.FullNode.Network,
+                new WalletAccountReference(Name, AccountName), Password, receivingAddress.ScriptPubKey, Money.COIN * 100, FeeType.Medium, 101));
+            node1.FullNode.MempoolManager().Validator.AcceptToMemoryPool(mempoolValidationState, transaction).Result.Should().BeTrue();
+            TestHelper.WaitLoop(() => node1.FullNode.MempoolManager().MempoolSize().Result == 1);
+            node1.FullNode.MempoolManager().GetMempoolAsync().Result.Should().Contain(transaction.GetHash());
+
+            // Node 2 has none in its mempool.
+            TestHelper.WaitLoop(() => node2.FullNode.MempoolManager().MempoolSize().Result == 0);
+
+            // Node 1 mines new tx into block - removed from mempool.
+            (HdAddress addressUsed, List<uint256> blockHashes) = TestHelper.MineBlocks(node1, 1);
+            uint256 minedBlockHash = blockHashes.Single();
+            TestHelper.WaitLoop(() => node1.FullNode.MempoolManager().MempoolSize().Result == 0);
+
+            // Node 2 mines two blocks to have greatest chainwork.
+            TestHelper.MineBlocks(node2, 2);
+
+            // Sync nodes and reorg occurs.
+            node1.CreateRPCClient().AddNode(node2.Endpoint, true);
+            TestHelper.WaitLoop(() => TestHelper.AreNodesSynced(node2, node1, true));
+
+            // Block mined by Node 1 is orphaned.
+            Assert.Null(node1.FullNode.ChainBehaviorState.ConsensusTip.FindAncestorOrSelf(minedBlockHash));
+
+            // Tx is returned to mempool.
+            node1.FullNode.MempoolManager().GetMempoolAsync().Result.Should().Contain(transaction.GetHash());
+
+            // New mined block contains this transaction from the orphaned blo.
+            TestHelper.MineBlocks(node1, 1);
+            node1.FullNode.Chain.Tip.Block.Transactions.Contains(transaction);
+        }
     }
 }
+
