@@ -3,20 +3,20 @@
 
 ## Motivation
 
-In order to produce blocks on Stratis network, a miner has to be online with running node and have its wallet open. This is necessary because at each time slot, the minor is supposed to check whether 1 of its UTXOs is eligible to be used as so-called coinstake kernel input and if so, it needs to use the private key associated with this UTXO in order to produce the coinstake transaction.
+In order to produce blocks on Stratis network, a miner has to be online with running node and have its wallet open. This is necessary because at each time slot, the miner is supposed to check whether 1 of its UTXOs is eligible to be used as a so-called coinstake kernel input and if so, it needs to use the private key associated with this UTXO in order to produce the coinstake transaction.
 
 The chance of a UTXO to be eligible for producing a coinstake transaction grows linearly with the number of coins that this UTXO presents.
 
 This implies that the biggest miners on the network are required to keep the coins in a hot wallet. This is dangerous in case the machine where the hot wallet runs is compromised.
 
-We propose cold staking, which is mechanism that eliminates the need to keep the coins in the hot wallet. With cold staking implemented, the minor still needs to be online with running the node and open wallet, but the coins that are used for staking, can be safely stored in cold storage. Therefore the open hot wallet does not need to hold any significant amount of coins, or it can even be completely empty.
+We propose cold staking, which is a mechanism that eliminates the need to keep the coins in the hot wallet. With cold staking implemented, the miner still needs to be online with running the node and open wallet, but the coins that are used for staking can be safely stored in cold storage. Therefore the open hot wallet does not need to hold any significant amount of coins, or it can even be completely empty.
 
 
 ## User interface flow
 
-We want to implement cold staking in a way that allows even inexperienced users to participate in production of new blocks. Since all the logic is implemented on the node side and the wallet is only using interfaces provided by the node, it is sufficient to describe the flow from inexperienced users point of view. Advanced users can then easily use the underlying functionality of the node.
+We want to implement cold staking in a way that allows even inexperienced users to participate in production of new blocks. Since all the logic is implemented on the node side and the wallet is only using interfaces provided by the node, it is sufficient to describe the flow from an inexperienced user's point of view. Advanced users can then easily use the underlying functionality of the node.
 
-We expect the user to interact with graphic user interface of its hot wallet, which should be HD wallet. The interface should provide a new tab, transaction option or button, which is designed for cold staking. We also expect the user to have any kind of cold storage wallet, such as hardware wallet or paper wallet et cetera. When the user wants to start cold staking, it should be asked to create a new transaction that will send the coins to the cold storage wallet. This special transaction will be constructed in a way that the coins will be safely transferred to the code storage while the hot wallet sending this transaction will still be able to participate in mining activity.
+We expect the user to interact with the graphic user interface of its hot wallet, which should be HD wallet. The interface should provide a new tab, transaction option or button, which is designed for cold staking. We also expect the user to have any kind of cold storage wallet, such as a hardware wallet or a paper wallet. When the user wants to start cold staking, it should be asked to create a new transaction that will send the coins to the cold storage wallet. This special transaction will be constructed in a way that the coins will be safely transferred to the code storage while the hot wallet sending this transaction will still be able to participate in mining activity.
 
 The user should also be allowed to cancel the setup at any time, especially when its hot wallet is compromised. In order to cancel the setup, the user only needs to send the coins out from the cold storage UTXO that was created with the special transaction. Therefore any move of the coin from cold storage to hot wallet or even another address in cold storage is sufficient to cancel the setup.
 
